@@ -1,0 +1,13 @@
+# Vercel serves whatever is in the repo as the website, so anything committed here is
+# fetchable at the public URL. These are the source documents the itinerary was written
+# from — they hold booking references and personal details, and the app does not need
+# them. Keep them local.
+Hotels.pdf
+Trip Plan - Daily.pdf
+trip.txt
+hotels.txt
+
+# The real email addresses. users.txt (hashes) is generated from this and IS deployed.
+users.plain.txt
+
+.vercel/

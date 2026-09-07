@@ -1,0 +1,1120 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="theme-color" content="#2563eb">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="טיול מזור">
+    <meta name="format-detection" content="telephone=no">
+    <title>טיול משפחתי לארה״ב 2026</title>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Font Awesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <!-- Leaflet CSS & JS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Heebo:wght@300;400;500;700&display=swap');
+        
+        body {
+            font-family: 'Heebo', sans-serif;
+            background-color: #f3f4f6;
+            overflow: hidden;
+            overscroll-behavior: none;
+            -webkit-tap-highlight-color: transparent;
+            -webkit-text-size-adjust: 100%;
+            text-size-adjust: 100%;
+            -webkit-font-smoothing: antialiased;
+        }
+
+        /* Scrollers: momentum on iOS, and never bubble a scroll to the page */
+        .app-scroll {
+            -webkit-overflow-scrolling: touch;
+            overscroll-behavior: contain;
+        }
+
+        .hide-scrollbar::-webkit-scrollbar {
+            display: none;
+        }
+        .hide-scrollbar {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+        }
+
+        /* Marker Circle Styling - sized for a fingertip, not a mouse pointer */
+        .custom-marker {
+            background-color: #3b82f6;
+            color: white;
+            border-radius: 50%;
+            text-align: center;
+            line-height: 28px;
+            font-weight: bold;
+            font-size: 13px;
+            border: 2px solid white;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.35);
+        }
+
+        .app-container {
+            height: 100vh;
+            height: 100dvh;
+            display: flex;
+            flex-direction: column;
+            padding-top: env(safe-area-inset-top);
+        }
+
+        .safe-bottom {
+            padding-bottom: env(safe-area-inset-bottom);
+        }
+
+        /* Every interactive control clears the 44px minimum touch target. */
+        .tap {
+            min-height: 44px;
+            min-width: 44px;
+        }
+
+        /* Leaflet ships mouse-sized controls; scale them up for fingers. */
+        .leaflet-touch .leaflet-bar a,
+        .leaflet-control-custom {
+            width: 42px !important;
+            height: 42px !important;
+            line-height: 42px !important;
+            font-size: 18px !important;
+        }
+        .leaflet-touch .leaflet-control-layers-toggle {
+            width: 42px !important;
+            height: 42px !important;
+            background-size: 24px 24px !important;
+        }
+        .leaflet-control-layers-expanded {
+            font-size: 14px;
+            padding: 10px 12px;
+            direction: rtl;
+            text-align: right;
+        }
+        .leaflet-control-layers-expanded label {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 6px 0;
+        }
+        .leaflet-popup-content-wrapper { border-radius: 14px; }
+        .leaflet-popup-content {
+            margin: 12px 14px;
+            font-size: 13px;
+            line-height: 1.5;
+            max-width: 70vw;
+        }
+        /* Keep map controls out from under a notch */
+        .leaflet-top { padding-top: env(safe-area-inset-top); }
+
+        /* Phone in landscape: very little vertical room, so shave the chrome. */
+        @media (orientation: landscape) and (max-height: 500px) {
+            .landscape-tight { padding-top: 0.125rem; padding-bottom: 0.125rem; }
+            .landscape-hide { display: none; }
+        }
+
+        /* Tablet and up: list and map side by side instead of tab-switched. */
+        @media (min-width: 768px) {
+            .leaflet-popup-content { max-width: 320px; font-size: 14px; }
+        }
+
+        /* Sign-in gate. Deliberately plain CSS rather than Tailwind classes: the gate is the first
+           thing painted, and it has to look right even when the Tailwind CDN is slow or unreachable. */
+        #authGate {
+            position: fixed;
+            inset: 0;
+            z-index: 100;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 20px;
+            padding: 28px 24px calc(28px + env(safe-area-inset-bottom));
+            background: linear-gradient(160deg, #1e3a8a 0%, #2563eb 55%, #3b82f6 100%);
+            color: #fff;
+            text-align: center;
+        }
+        /* Both of these are display:flex, so the hidden attribute alone would not hide them. */
+        #authGate[hidden],
+        .app-container[hidden] { display: none; }
+
+        .gate-icon {
+            width: 68px;
+            height: 68px;
+            border-radius: 20px;
+            background: rgba(255, 255, 255, 0.15);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 30px;
+        }
+        .gate-title { font-size: 20px; font-weight: 700; line-height: 1.4; }
+        .gate-sub { font-size: 14px; opacity: 0.85; max-width: 22rem; line-height: 1.6; }
+        /* Google renders its own button in here; it is LTR by design, so centre it explicitly. */
+        #gsiButton { display: flex; justify-content: center; min-height: 44px; }
+        .gate-msg {
+            font-size: 14px;
+            line-height: 1.6;
+            max-width: 22rem;
+            background: rgba(0, 0, 0, 0.22);
+            border-radius: 14px;
+            padding: 12px 16px;
+        }
+        .gate-msg b { word-break: break-all; }
+        .gate-btn {
+            background: rgba(255, 255, 255, 0.16);
+            color: #fff;
+            border: 1px solid rgba(255, 255, 255, 0.35);
+            border-radius: 999px;
+            padding: 10px 22px;
+            font: inherit;
+            font-size: 14px;
+            cursor: pointer;
+        }
+        .gate-btn:active { background: rgba(255, 255, 255, 0.28); }
+        .gate-foot { font-size: 12px; opacity: 0.6; }
+    </style>
+</head>
+<body class="text-gray-800">
+
+    <!-- Sign-in gate. Covers everything until an allowlisted Google account signs in. -->
+    <div id="authGate">
+        <div class="gate-icon"><i class="fa-solid fa-car-side"></i></div>
+        <div class="gate-title">משפחת מזור בצפון-מזרח ארה״ב<br>2026</div>
+        <div class="gate-sub">האפליקציה פתוחה לבני המשפחה בלבד. יש להיכנס עם חשבון Google מורשה.</div>
+
+        <div id="gsiButton"></div>
+        <div id="authMsg" class="gate-msg" hidden></div>
+        <button id="authRetry" class="gate-btn" onclick="retrySignIn()" hidden>כניסה עם חשבון אחר</button>
+
+        <div class="gate-foot">הכניסה נשמרת במכשיר — בפעמים הבאות האפליקציה תיפתח גם ללא אינטרנט.</div>
+    </div>
+
+    <div class="app-container" hidden>
+        <!-- Header -->
+        <header class="bg-white shadow-sm z-20 flex justify-between items-center gap-2 px-3 py-2 shrink-0 landscape-tight">
+            <div class="flex items-center gap-2 min-w-0">
+                <div class="bg-blue-600 text-white rounded-lg h-9 w-9 md:h-11 md:w-11 flex items-center justify-center text-base md:text-xl shrink-0">
+                    <i class="fa-solid fa-car-side"></i>
+                </div>
+                <h1 class="font-bold text-sm md:text-lg leading-tight truncate">משפחת מזור בצפון-מזרח ארה״ב<br><span class="text-xs md:text-sm font-normal text-gray-500">2026</span></h1>
+            </div>
+            
+            <div class="flex items-center gap-1.5 shrink-0">
+                <a href="https://drive.google.com/drive/folders/1VIF7p_U_QwIUxi0c3-DEVw0UA71agzfG?usp=drive_link" target="_blank" rel="noopener" class="tap bg-gray-100 active:bg-gray-200 text-gray-700 px-3 rounded-xl text-xs md:text-sm font-medium transition-colors flex items-center justify-center gap-1.5 shrink-0">
+                    <i class="fa-brands fa-google-drive text-blue-500 text-base md:text-lg"></i>
+                    <span class="hidden sm:inline">תיקיית מסמכים</span>
+                    <span class="sm:hidden">מסמכים</span>
+                </a>
+                <button id="btnSignOut" onclick="signOut()" aria-label="יציאה מהחשבון" title="יציאה מהחשבון" class="tap bg-gray-100 active:bg-gray-200 text-gray-500 h-9 w-9 rounded-xl flex items-center justify-center transition-colors shrink-0">
+                    <i class="fa-solid fa-right-from-bracket text-base"></i>
+                </button>
+            </div>
+        </header>
+
+        <!-- Days Navigation (Carousel) -->
+        <nav class="bg-blue-50 border-b border-blue-100 shrink-0 flex items-center px-1 z-10 relative shadow-sm">
+            <button id="btnPrev" onclick="prevDay()" aria-label="היום הקודם" class="tap flex items-center justify-center text-blue-600 active:bg-blue-100 rounded-full transition-colors z-10 shrink-0 disabled:opacity-30">
+                <i class="fa-solid fa-chevron-right text-base"></i>
+            </button>
+            
+            <div id="daysCarousel" class="flex-1 overflow-x-auto whitespace-nowrap hide-scrollbar app-scroll flex items-center gap-1.5 px-1 py-1.5 scroll-smooth snap-x">
+                <!-- Day buttons -->
+            </div>
+            
+            <button id="btnNext" onclick="nextDay()" aria-label="היום הבא" class="tap flex items-center justify-center text-blue-600 active:bg-blue-100 rounded-full transition-colors z-10 shrink-0 disabled:opacity-30">
+                <i class="fa-solid fa-chevron-left text-base"></i>
+            </button>
+        </nav>
+
+        <!-- Stats Bar - Compact with Weather -->
+        <div class="bg-white shrink-0 flex justify-between items-stretch py-1 px-1 shadow-sm z-10 border-b border-gray-100 divide-x divide-x-reverse divide-gray-100 landscape-tight">
+            <div class="flex items-center gap-1.5 md:gap-2 text-gray-600 w-1/3 justify-center px-1 py-1">
+                <div class="bg-orange-100 text-orange-500 rounded-full h-8 w-8 md:h-10 md:w-10 flex items-center justify-center text-sm md:text-base shrink-0">
+                    <i class="fa-solid fa-car"></i>
+                </div>
+                <div class="flex flex-col leading-tight overflow-hidden">
+                    <span class="text-[10px] md:text-xs text-gray-400">מרחק</span>
+                    <span id="statDistance" class="font-bold text-xs md:text-base truncate">--</span>
+                </div>
+            </div>
+            <div class="flex items-center gap-1.5 md:gap-2 text-gray-600 w-1/3 justify-center px-1 py-1">
+                <div class="bg-teal-100 text-teal-500 rounded-full h-8 w-8 md:h-10 md:w-10 flex items-center justify-center text-sm md:text-base shrink-0">
+                    <i class="fa-regular fa-clock"></i>
+                </div>
+                <div class="flex flex-col leading-tight overflow-hidden">
+                    <span class="text-[10px] md:text-xs text-gray-400">נסיעה</span>
+                    <span id="statTime" class="font-bold text-xs md:text-base truncate">--</span>
+                </div>
+            </div>
+            <button type="button" class="flex items-center gap-1.5 md:gap-2 text-gray-600 w-1/3 justify-center px-1 py-1 text-right active:bg-gray-50 transition-colors" onclick="alert('נתוני מזג האוויר מבוססים על ממוצע עונתי לספטמבר ביעדים אלו.')">
+                <div id="weatherIconBg" class="bg-sky-100 text-sky-500 rounded-full h-8 w-8 md:h-10 md:w-10 flex items-center justify-center text-sm md:text-base shrink-0">
+                    <i id="weatherIcon" class="fa-solid fa-cloud-sun"></i>
+                </div>
+                <div class="flex flex-col leading-tight overflow-hidden">
+                    <span id="statWeatherTemp" class="font-bold text-[11px] md:text-sm truncate" dir="ltr">--</span>
+                    <span id="statWeatherDesc" class="text-[10px] md:text-xs text-gray-500 truncate">--</span>
+                </div>
+            </button>
+        </div>
+
+        <!-- Main Content Area (Absolute positioning for views) -->
+        <div class="flex-1 relative overflow-hidden md:flex">
+            
+            <!-- VIEW 1: Timeline (Default). On tablet it becomes a fixed side column. -->
+            <div id="timelineContainer" class="absolute inset-0 overflow-y-auto app-scroll bg-gray-50 p-3 pb-8 scroll-smooth md:static md:block md:w-[38%] md:min-w-[300px] md:max-w-md md:shrink-0 md:border-l md:border-gray-200 md:p-4">
+                <div class="flex justify-between items-end gap-2 mb-3">
+                    <h2 id="currentDayTitle" class="text-base md:text-xl font-bold text-gray-800 leading-snug">--</h2>
+                    <span id="currentDate" class="text-[11px] md:text-sm font-medium text-blue-600 bg-blue-100 px-2 py-0.5 rounded shrink-0 whitespace-nowrap">--</span>
+                </div>
+                
+                <div id="timelineContent" class="space-y-2.5 md:space-y-3">
+                    <!-- Timeline items will be injected here -->
+                </div>
+            </div>
+
+            <!-- VIEW 2: Map. Hidden behind a tab on phones, always visible on tablet. -->
+            <div id="mapContainer" class="absolute inset-0 hidden md:block md:static md:flex-1">
+                <div id="map" class="w-full h-full z-0"></div>
+            </div>
+            
+        </div>
+
+        <!-- Bottom Navigation Tabs -->
+        <nav class="bg-white border-t border-gray-200 shrink-0 flex justify-around safe-bottom z-20 md:hidden">
+            <button id="tabList" onclick="switchView('list')" class="flex-1 flex flex-col items-center justify-center py-2 min-h-[52px] text-blue-600 active:bg-blue-50 transition-colors">
+                <i class="fa-solid fa-list-ul text-xl mb-0.5"></i>
+                <span class="text-[11px] font-medium">רשימה</span>
+            </button>
+            <button id="tabMap" onclick="switchView('map', true)" class="flex-1 flex flex-col items-center justify-center py-2 min-h-[52px] text-gray-400 active:bg-blue-50 transition-colors">
+                <i class="fa-solid fa-map-location-dot text-xl mb-0.5"></i>
+                <span class="text-[11px] font-medium">מפה</span>
+            </button>
+        </nav>
+    </div>
+
+    <!-- JavaScript Application Logic -->
+    <script>
+        // ─────────────────────────────────────────────────────────────────────────────
+        // Sign-in gate
+        //
+        // Only Google accounts listed in users.txt can open the app. This is a lock on the
+        // door, not a wall: everything here runs in the browser, so anyone willing to open
+        // DevTools can walk past it, and users.txt is publicly readable once deployed.
+        // It keeps strangers who find the URL out, and that is all it is meant to do.
+        //
+        // SETUP: paste the OAuth 2.0 client ID (Google Cloud Console → Credentials → Create
+        // credentials → OAuth client ID → Web application) below. Every origin the app is
+        // served from — http://localhost:8000 and the deploy URL — must be listed there under
+        // "Authorized JavaScript origins". No redirect URIs are needed for the popup flow.
+        const GOOGLE_CLIENT_ID = '361162593346-h8q1ohk8mrksuk5jn4vph2fpcqggjcku.apps.googleusercontent.com';
+
+        const AUTH_STORAGE_KEY = 'tm_auth';
+        let allowedEntries = null;  // Set of SHA-256 hashes, or null if users.txt was unreachable
+        let appStarted = false;
+
+        function readSession() {
+            try { return JSON.parse(localStorage.getItem(AUTH_STORAGE_KEY)) || null; } catch (e) { return null; }
+        }
+
+        function saveSession(session) {
+            try { localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(session)); } catch (e) { /* private mode */ }
+        }
+
+        function clearSession() {
+            try { localStorage.removeItem(AUTH_STORAGE_KEY); } catch (e) { /* private mode */ }
+        }
+
+        // users.txt is the source of truth for who gets in — one entry per line (commas and
+        // # comments tolerated). Entries are SHA-256 hashes of the lowercased address, not the
+        // address itself, so the family's email is not left sitting at a public URL. To change who
+        // gets in, edit users.plain.txt (git-ignored) and re-run `python hash-users.py`.
+        async function loadAllowlist() {
+            const res = await fetch('users.txt', { cache: 'no-store' });
+            if (!res.ok) throw new Error('users.txt returned ' + res.status);
+            const entries = (await res.text())
+                .split(/[\n,]/)
+                .map(line => line.trim().toLowerCase())
+                .filter(line => line && !line.startsWith('#'));
+            if (!entries.length) throw new Error('users.txt is empty');
+            return new Set(entries);
+        }
+
+        async function sha256Hex(text) {
+            const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
+            return [...new Uint8Array(digest)].map(b => b.toString(16).padStart(2, '0')).join('');
+        }
+
+        // A plain address in users.txt still works, so a hand-added line is never silently ignored.
+        async function isAllowed(email) {
+            if (!allowedEntries) return false;
+            if (allowedEntries.has(email)) return true;
+            return allowedEntries.has(await sha256Hex(email));
+        }
+
+        function gateMessage(html, withRetry) {
+            const msg = document.getElementById('authMsg');
+            msg.innerHTML = html;
+            msg.hidden = false;
+            document.getElementById('gsiButton').hidden = true;
+            document.getElementById('authRetry').hidden = !withRetry;
+        }
+
+        // Loaded on demand rather than from <head>: a signed-in user opening the app with no
+        // signal must not sit waiting on a request to accounts.google.com that cannot resolve.
+        function loadGoogleScript() {
+            return new Promise((resolve, reject) => {
+                const el = document.createElement('script');
+                el.src = 'https://accounts.google.com/gsi/client';
+                el.async = true;
+                el.onload = resolve;
+                el.onerror = () => reject(new Error('failed to load Google Identity Services'));
+                document.head.appendChild(el);
+            });
+        }
+
+        // The ID token is a JWT; we read its payload without verifying the signature, which
+        // would need a server. Given the gate is client-side anyway, that adds nothing real.
+        function decodeJwtPayload(jwt) {
+            try {
+                const part = String(jwt).split('.')[1].replace(/-/g, '+').replace(/_/g, '/');
+                const padded = part + '='.repeat((4 - part.length % 4) % 4);
+                const bytes = Uint8Array.from(atob(padded), c => c.charCodeAt(0));
+                return JSON.parse(new TextDecoder('utf-8').decode(bytes));   // TextDecoder so Hebrew names survive
+            } catch (e) {
+                return null;
+            }
+        }
+
+        async function onGoogleCredential(response) {
+            const claims = decodeJwtPayload(response && response.credential);
+            if (!claims || !claims.email) {
+                gateMessage('לא הצלחנו לקרוא את פרטי החשבון. נסו שוב.', true);
+                return;
+            }
+
+            const email = String(claims.email).trim().toLowerCase();
+            if (claims.email_verified === false) {
+                gateMessage('כתובת המייל של החשבון הזה לא אומתה מול Google.', true);
+                return;
+            }
+            if (!await isAllowed(email)) {
+                gateMessage('החשבון <b>' + email + '</b> אינו מורשה לצפות בטיול.', true);
+                return;
+            }
+
+            saveSession({ email: email, name: claims.name || '', picture: claims.picture || '' });
+            startApp();
+        }
+
+        async function showGate() {
+            document.getElementById('authGate').hidden = false;
+
+            // Opening the file directly blocks the users.txt fetch and is refused by Google
+            // outright, so the "no connection" message below would send you chasing the wrong
+            // problem. Name the real one.
+            if (location.protocol === 'file:') {
+                gateMessage('לא ניתן לפתוח את הקובץ ישירות — צריך להריץ שרת מקומי.<br>' +
+                            'הריצו בתיקייה <b dir="ltr">python -m http.server 8000</b><br>' +
+                            'ופתחו <b dir="ltr">http://localhost:8000/</b>', false);
+                return;
+            }
+
+            // crypto.subtle (used to hash the address) only exists in a secure context, and Google
+            // refuses to sign in outside one either. Serving over plain http from a LAN IP — a
+            // phone hitting 192.168.x.x, say — lands here.
+            if (!window.isSecureContext || !window.crypto || !crypto.subtle) {
+                gateMessage('הכניסה דורשת חיבור מאובטח.<br>פתחו את האפליקציה בכתובת <b dir="ltr">https</b> או דרך <b dir="ltr">localhost</b>.', false);
+                return;
+            }
+
+            if (GOOGLE_CLIENT_ID.startsWith('PASTE_YOUR_CLIENT_ID_HERE')) {
+                gateMessage('הכניסה עם Google עדיין לא הוגדרה.<br>יש להזין מזהה לקוח (Client ID) בקובץ index.html.', false);
+                return;
+            }
+
+            // No allowlist means no way to tell who is allowed in, and no stored session to fall
+            // back on — say so plainly instead of failing at the Google button a step later.
+            if (!allowedEntries) {
+                gateMessage('אין חיבור לאינטרנט, ולכן לא ניתן לאמת את הכניסה. התחברו לרשת ונסו שוב.', true);
+                return;
+            }
+
+            try {
+                await loadGoogleScript();
+                google.accounts.id.initialize({
+                    client_id: GOOGLE_CLIENT_ID,
+                    callback: onGoogleCredential,
+                    auto_select: false,
+                    cancel_on_tap_outside: true
+                });
+                google.accounts.id.renderButton(document.getElementById('gsiButton'), {
+                    type: 'standard', theme: 'filled_blue', size: 'large',
+                    shape: 'pill', text: 'signin_with', locale: 'he', width: 260
+                });
+            } catch (e) {
+                console.warn(e);
+                gateMessage('לא הצלחנו לטעון את מסך הכניסה של Google. בדקו את החיבור לאינטרנט ונסו שוב.', true);
+            }
+        }
+
+        function retrySignIn() {
+            if (typeof google !== 'undefined') {
+                try { google.accounts.id.disableAutoSelect(); } catch (e) { /* not initialized */ }
+            }
+            location.reload();
+        }
+
+        function signOut() {
+            if (!confirm('להתנתק מהחשבון?')) return;
+            clearSession();
+            if (typeof google !== 'undefined') {
+                try { google.accounts.id.disableAutoSelect(); } catch (e) { /* not initialized */ }
+            }
+            location.reload();
+        }
+
+        async function initAuth() {
+            try {
+                allowedEntries = await loadAllowlist();
+            } catch (e) {
+                allowedEntries = null;   // offline, or users.txt missing
+                console.warn('allowlist unavailable:', e.message);
+            }
+
+            const session = readSession();
+            if (session && session.email) {
+                // With no allowlist we trust the stored session — that address was checked against
+                // users.txt when it signed in, and locking a family member out of their itinerary
+                // because a phone lost signal is the worse failure.
+                if (!allowedEntries || await isAllowed(session.email)) {
+                    startApp();
+                    return;
+                }
+                clearSession();   // dropped from users.txt since the last sign-in
+            }
+
+            showGate();
+        }
+
+        // Runs once, after the gate clears. initMap() must stay first: it creates markersGroup,
+        // which updateUI() dereferences.
+        function startApp() {
+            if (appStarted) return;
+            appStarted = true;
+
+            document.getElementById('authGate').hidden = true;
+            document.querySelector('.app-container').hidden = false;
+
+            initMap();
+            enableSwipeNavigation();
+            handleViewportChange();
+        }
+
+        // Database
+        const itineraryData = [
+            {
+                dayId: 1, date: "10/9/26", dayName: "יום חמישי", title: "נחיתה בניו יורק והתארגנות", 
+                driveTime: "45 דק'", driveDistance: "15 מייל",
+                weather: { max: 26, min: 18, desc: "מעונן חלקית", aqi: 55, icon: "fa-cloud-sun", color: "sky" },
+                stops: [
+                    { title: "נחיתה בשדה התעופה JFK", desc: "טיסה LY003, נחיתה 04:55. לקיחת הרכב מ-Alamo ב-09:30 (Air Train ל-Federal Circle, Building 308). לצלם את הרכב, לוודא ערכת פנצ׳ר ומיכל מלא, ולהתקין EZPASS.", lat: 40.6413, lng: -73.7781 },
+                    { title: "נסיעה למלון HYATT PLACE", desc: "חניה: 133-59 Roosevelt Ave (38$ ליום לאורחי המלון). הפקדת מזוודות, קניית מצרכים למהלך הטיול (כולל ברכות לראש השנה).", lat: 40.75890, lng: -73.83233 }
+                ]
+            },
+            {
+                dayId: 2, date: "11/9/26", dayName: "יום שישי - ערב חג", title: "מניו יורק למיסטיק", 
+                driveTime: "שעתיים ו-40 דק'", driveDistance: "128 מייל",
+                weather: { max: 24, min: 16, desc: "שמיים נקיים", aqi: 40, icon: "fa-sun", color: "amber" },
+                stops: [
+                    { title: "Mystic Aquarium", desc: "יציאה מהמלון ב-07:00. אקווריום ייחודי עם לוויתני בלוגה ואריות ים שטלר. כניסה מ-10:00, הכרטיסים כבר נקנו.", lat: 41.37324, lng: -71.95457 },
+                    { title: "Mystic Seaport Museum", desc: "מוזיאון ימי מוביל, נמל משוחזר וספינות עתיקות.", lat: 41.35990, lng: -71.96315 },
+                    { title: "Mystic River Bascule Bridge", desc: "תצפית על הגשר המתרומם וסיור ברחוב הראשי.", lat: 41.35503, lng: -71.96774 },
+                    { title: "Mystic Pizza", desc: "הפסקת אוכל בפיצרייה המפורסמת מהסרט.", lat: 41.35485, lng: -71.97179 },
+                    { title: "Olde Mistick Village", desc: "מרכז קניות מעוצב בסגנון קולוניאלי היסטורי.", lat: 41.37315, lng: -71.95864 },
+                    { title: "Best Western Mystic Hotel", desc: "לינה במיסטיק וחגיגת ערב ראש השנה.", lat: 41.37837, lng: -71.95584 }
+                ]
+            },
+            {
+                dayId: 3, date: "12/9/26", dayName: "יום שבת - חג", title: "ג'יימסטאון וניופורט", 
+                driveTime: "שעתיים", driveDistance: "80 מייל",
+                weather: { max: 23, min: 15, desc: "שמיים נקיים", aqi: 35, icon: "fa-sun", color: "amber" },
+                stops: [
+                    { title: "Windmill Hill Historic District", desc: "עצירה בדרך לתצפית על תחנת רוח עתיקה.", lat: 41.51555, lng: -71.37480 },
+                    { title: "Beavertail Lighthouse Museum", desc: "פארק מדינה עם מגדלור ותצפיות נוף מרשימות.", lat: 41.45163, lng: -71.39948 },
+                    { title: "Jamestown Wood Pile Pier", desc: "סיור באזור המרינה והעיירה השלווה.", lat: 41.49598, lng: -71.36692 },
+                    { title: "Newport Bridge & Ocean Ave", desc: "נסיעה על הגשר ודרך נוף יפיפייה.", lat: 41.46057, lng: -71.35829 },
+                    { title: "Narragansett Ave (Cliff Walk)", desc: "הליכה לאורך טיילת הצוקים ותצפית על אחוזות הנופש.", lat: 41.47582, lng: -71.29842 },
+                    { title: "Touro Synagogue", desc: "בית הכנסת ההיסטורי - הראשון בצפון אמריקה.", lat: 41.48933, lng: -71.31209 },
+                    { title: "Bowen's Wharf", desc: "האזור התוסס בעיר עם מסעדות וחנויות.", lat: 41.48747, lng: -71.31579 },
+                    { title: "Towne Place Suites Westport", desc: "הגעה למלון ללינה (צפונה מניופורט).", lat: 41.67890, lng: -71.11227 }
+                ]
+            },
+            {
+                dayId: 4, date: "13/9/26", dayName: "ראשון", title: "קייפ קוד ובוסטון", 
+                driveTime: "4.5 שעות", driveDistance: "219 מייל",
+                weather: { max: 22, min: 14, desc: "מעונן חלקית", aqi: 30, icon: "fa-cloud-sun", color: "sky" },
+                stops: [
+                    { title: "Dolphin Fleet Whale Watch", desc: "שייט צפייה בלוויתנים בפרובינסטאון (10:00).", lat: 42.05089, lng: -70.18516 },
+                    { title: "Uncle Tim's Bridge", desc: "נקודת נוף יפה לגשר עתיק מעץ בוולפליט.", lat: 41.93720, lng: -70.02940 },
+                    { title: "Boston Omni Parker House", desc: "הגעה לעיר בוסטון למלון ליד בוסטון קומון.", lat: 42.35798, lng: -71.06029 },
+                    { title: "Pi Alley Parking Garage", desc: "חניית הרכב בחניון קרוב למלון.", lat: 42.35788, lng: -71.05799 }
+                ]
+            },
+            {
+                dayId: 5, date: "14/9/26", dayName: "שני", title: "בוסטון: שביל החירות", 
+                driveTime: "אין", driveDistance: "הליכה",
+                weather: { max: 24, min: 15, desc: "שמיים נקיים", aqi: 45, icon: "fa-sun", color: "amber" },
+                stops: [
+                    { title: "Boston Common", desc: "מרכז המבקרים נפתח ב-08:30 - נצטייד במפות ומידע על שביל החירות.", lat: 42.3550, lng: -71.0656 },
+                    { title: "Freedom Trail", desc: "מסלול הליכה באורך כ-4 ק״מ דרך 17 אתרים היסטוריים.", lat: 42.3630, lng: -71.0537 },
+                    { title: "USS Constitution", desc: "בסיום השביל - עלייה על ספינת הקרב ההיסטורית בנמל צ׳רלסטאון.", lat: 42.37245, lng: -71.05650 },
+                    { title: "Boston Public Garden", desc: "גן יפהפה עם אגם קטן.", lat: 42.3541, lng: -71.0699 },
+                    { title: "Charles River Esplanade", desc: "הליכה לאורך טיילת הנהר.", lat: 42.3551, lng: -71.0747 },
+                    { title: "Prudential Center (תצפית)", desc: "אופציה לעלייה לתצפית בקומה 50.", lat: 42.3475, lng: -71.0822 },
+                    { title: "Newbury St. & Trinity Church", desc: "קניות וכנסייה מפורסמת.", lat: 42.3503, lng: -71.0766 },
+                    { title: "Chinatown & Downtown", desc: "חזרה למלון דרך אזור הקניות.", lat: 42.3514, lng: -71.0604 }
+                ]
+            },
+            {
+                dayId: 6, date: "15/9/26", dayName: "שלישי", title: "אטרקציות בבוסטון", 
+                driveTime: "אין", driveDistance: "הליכה",
+                weather: { max: 23, min: 14, desc: "עננים", aqi: 48, icon: "fa-cloud", color: "gray" },
+                stops: [
+                    { title: "Boston Duck Tours", desc: "סיור באוטובוס אמפיבי מודרך ושייט בנהר.", lat: 42.3588, lng: -71.0494 },
+                    { title: "Quincy Market", desc: "מתחם אוכל היסטורי - עצירה לצהריים.", lat: 42.36024, lng: -71.05478 },
+                    { title: "Tea Party Ships & Museum", desc: "שחזור אינטראקטיבי של מסיבת התה.", lat: 42.3524, lng: -71.0514 }
+                ]
+            },
+            {
+                dayId: 7, date: "16/9/26", dayName: "רביעי", title: "בדרך לקאמדן (מיין)", 
+                driveTime: "4.5 שעות", driveDistance: "210 מייל",
+                weather: { max: 21, min: 12, desc: "מעונן חלקית", aqi: 25, icon: "fa-cloud-sun", color: "sky" },
+                stops: [
+                    { title: "Kittery Premium Outlets", desc: "עצירה להתרעננות בדרך.", lat: 43.11523, lng: -70.73085 },
+                    { title: "Fort Williams Park", desc: "המגדלור האייקוני פורטלנד הד.", lat: 43.62272, lng: -70.20912 },
+                    { title: "Owls Head Lighthouse", desc: "מגדלור ציורי ממוקם על צוק.", lat: 44.09018, lng: -69.04728 },
+                    { title: "Rockland Breakwater", desc: "הליכה על שובר הגלים הארוך עד למגדלור.", lat: 44.11583, lng: -69.08461 },
+                    { title: "Rockland Harbor Hotel", desc: "לינה ברוקלנד.", lat: 44.10684, lng: -69.11002 }
+                ]
+            },
+            {
+                dayId: 8, date: "17/9/26", dayName: "חמישי", title: "קאמדן לפארק אקדיה", 
+                driveTime: "שעתיים ו-40 דק'", driveDistance: "89 מייל",
+                weather: { max: 20, min: 11, desc: "עננים", aqi: 20, icon: "fa-cloud", color: "gray" },
+                stops: [
+                    { title: "Megunticook Falls", desc: "תצפית יפה על מפלונים בקאמדן.", lat: 44.21007, lng: -69.06394 },
+                    { title: "Mount Battie", desc: "נסיעה לפסגה לתצפית פנורמית.", lat: 44.22339, lng: -69.06885 },
+                    { title: "Penobscot Narrows Bridge", desc: "תצפית ראשונה על גשר הכבלים (לפני הגשר).", lat: 44.55714, lng: -68.80777 },
+                    { title: "Historic Waldo-Hancock Bridge", desc: "תצפית שנייה על הגשר (אחרי הגשר).", lat: 44.56166, lng: -68.80500 },
+                    { title: "Fort Knox", desc: "סיור במוצב צבאי מהמאה ה-19. פתוח 09:00 עד השקיעה.", lat: 44.56619, lng: -68.80384 },
+                    { title: "Hulls Cove Visitor Center", desc: "מרכז המבקרים של פארק אקדיה - אם יהיה זמן, פתוח עד 16:30.", lat: 44.40914, lng: -68.24756 },
+                    { title: "Bar Harbor Grand Hotel", desc: "הגעה למלון בבר הרבור (שהייה של 5 לילות, כולל יומיים של חג יום הכיפורים).", lat: 44.38562, lng: -68.20439 }
+                ]
+            },
+            {
+                dayId: 9, date: "18/9/26", dayName: "שישי", title: "פארק אקדיה (מזרח)", 
+                driveTime: "שעה ו-20 דק'", driveDistance: "30 מייל",
+                weather: { max: 19, min: 10, desc: "שמיים נקיים", aqi: 22, icon: "fa-sun", color: "amber" },
+                stops: [
+                    { title: "Sand Beach", desc: "חוף חול יפה בשמורה. מהחניה אפשר לצאת קודם למסלול Beehive Trail (נחליט במקום).", lat: 44.33045, lng: -68.18456 },
+                    { title: "Thunder Hole", desc: "תצפית על הגלים המתנפצים בסלעים.", lat: 44.32072, lng: -68.18948 },
+                    { title: "Otter Cliff Overlook", desc: "תצפית נוף מצוק הלוטרה.", lat: 44.31078, lng: -68.18983 },
+                    { title: "Hunter Beach Overlook", desc: "עוד נקודת תצפית מרשימה.", lat: 44.29754, lng: -68.21521 },
+                    { title: "Jordan Pond House", desc: "ארוחת צהריים - לחמניות פופ-אובר. מומלץ להזמין מקום מראש.", lat: 44.32011, lng: -68.25370 },
+                    { title: "Eagle Lake Overlook", desc: "תצפית על אגם איגל מכביש הפארק ההיקפי.", lat: 44.364977, lng: -68.241308 },
+                    { title: "Wild Gardens of Acadia", desc: "סיור קצר בגנים הבוטניים.", lat: 44.36262, lng: -68.20759 },
+                    { title: "Egg Rock Overlook", desc: "תצפית נוספת בדרך למלון.", lat: 44.36015, lng: -68.18839 }
+                ]
+            },
+            {
+                dayId: 10, date: "19/9/26", dayName: "שבת", title: "פארק אקדיה (מערב)", 
+                driveTime: "1.5 שעות", driveDistance: "42 מייל",
+                weather: { max: 21, min: 12, desc: "שמיים נקיים", aqi: 25, icon: "fa-sun", color: "amber" },
+                stops: [
+                    { title: "Dysart's Marina", desc: "החלק המערבי והשקט של השמורה.", lat: 44.27473, lng: -68.32357 },
+                    { title: "Southwest Harbor", desc: "תצפית למפרץ הציורי.", lat: 44.23734, lng: -68.30200 },
+                    { title: "Bass Harbor Head Light", desc: "מגדלור מפורסם על צוק דרומי.", lat: 44.22225, lng: -68.33775 },
+                    { title: "Eagle Lake Bridge", desc: "תצפית אל גשר אבן בדרך צפונה.", lat: 44.37806, lng: -68.25264 },
+                    { title: "Duck Brook Bridge", desc: "גשר אבן פסטורלי נוסף.", lat: 44.39145, lng: -68.23568 }
+                ]
+            },
+            {
+                dayId: 11, date: "20/9/26", dayName: "ראשון - ערב כיפור", title: "זריחה בקאדילק", 
+                driveTime: "40 דק'", driveDistance: "13 מייל",
+                weather: { max: 20, min: 11, desc: "מעונן חלקית", aqi: 24, icon: "fa-cloud-sun", color: "sky" },
+                stops: [
+                    { title: "Cadillac Mountain Sunrise", desc: "השכמה מוקדמת לתצפית זריחה (קר בפסגה!).", lat: 44.35237, lng: -68.22508 },
+                    { title: "התארגנות וצום (Bar Harbor)", desc: "הכנות לכיפור ומנוחה.", lat: 44.38562, lng: -68.20439 }
+                ]
+            },
+            {
+                dayId: 12, date: "21/9/26", dayName: "שני - כיפור", title: "יום כיפור", 
+                driveTime: "אין", driveDistance: "0 מייל",
+                weather: { max: 19, min: 10, desc: "עננים", aqi: 20, icon: "fa-cloud", color: "gray" },
+                stops: [
+                    { title: "מנוחה וסיור חופשי", desc: "יום חופשי בעיירה ללא נסיעות.", lat: 44.38562, lng: -68.20439 }
+                ]
+            },
+            {
+                dayId: 13, date: "22/9/26", dayName: "שלישי", title: "להרים הלבנים", 
+                driveTime: "5 שעות", driveDistance: "221 מייל",
+                weather: { max: 18, min: 8, desc: "שמיים נקיים", aqi: 15, icon: "fa-sun", color: "amber" },
+                stops: [
+                    { title: "Rumford Falls", desc: "מפלים עצומים ועוצמתיים - נקודת תצפית ראשונה.", lat: 44.53977, lng: -70.54563 },
+                    { title: "Rumford Falls (תצפית 2)", desc: "נקודת תצפית שנייה על המפלים.", lat: 44.53963, lng: -70.54553 },
+                    { title: "העיירה Bethel", desc: "עצירה בדרך. בהמשך נעבור את שלט המעבר ממדינת מיין למדינת ניו המפשיר.", lat: 44.00119, lng: -70.99671 },
+                    { title: "Home 2 Suites North Conway", desc: "הגעה למלון קרוב לאאוטלט.", lat: 44.01868, lng: -71.11467 }
+                ]
+            },
+            {
+                dayId: 14, date: "23/9/26", dayName: "רביעי", title: "הר וושינגטון", 
+                driveTime: "שעתיים ו-10 דק'", driveDistance: "63 מייל",
+                weather: { max: 17, min: 7, desc: "מעונן", aqi: 18, icon: "fa-cloud", color: "gray" },
+                stops: [
+                    { title: "Conway Scenic Railroad", desc: "מיד אחרי ארוחת הבוקר - רכבת הנוף של קונווי. הכרטיסים ל-09:30, מחלקת Observation Dome, משך הנסיעה 55 דק׳.", lat: 44.05191, lng: -71.12842 },
+                    { title: "Mount Washington", desc: "עלייה להר הגבוה באזור בכביש האגרה - רק אם הראות ומזג האוויר טובים (לבדוק באפליקציה). נקודת החניה בפסגה.", lat: 44.26970, lng: -71.30255 },
+                    { title: "Thompson Falls", desc: "בדרך חזרה מההר - מסלול הליכה קצר של כ-1.8 ק״מ הלוך ושוב.", lat: 44.26460, lng: -71.23942 },
+                    { title: "Glen Ellis Falls", desc: "מפל עוצמתי בגובה 20 מטר (מומלץ יותר ממפלי טומפסון).", lat: 44.24638, lng: -71.25448 },
+                    { title: "Settlers Green Outlet", desc: "קניות באאוטלט הפטור ממס. פתוח עד 18:00.", lat: 44.02343, lng: -71.11422 },
+                    { title: "Home 2 Suites North Conway", desc: "חזרה למלון ללינה.", lat: 44.01868, lng: -71.11467 }
+                ]
+            },
+            {
+                dayId: 15, date: "24/9/26", dayName: "חמישי", title: "כביש קנקמגוס לוורמונט", 
+                driveTime: "3 שעות ו-10 דק'", driveDistance: "125 מייל",
+                weather: { max: 19, min: 9, desc: "שמיים נקיים", aqi: 20, icon: "fa-sun", color: "amber" },
+                stops: [
+                    { title: "כניסה לכביש Kancamagus", desc: "תחילת דרך הנוף (כביש 112) - כאן מסתיים המסלול הכחול ומתחיל הירוק.", lat: 43.97859, lng: -71.13381 },
+                    { title: "Albany Covered Bridge", desc: "גשר היסטורי מקורה משנת 1858 על נהר הסוויפט.", lat: 44.00551, lng: -71.24150 },
+                    { title: "Rocky Gorge Scenic Area", desc: "נקודת תצפית יפה על המפלונים והנהר.", lat: 44.00257, lng: -71.27760 },
+                    { title: "Sabbaday Falls", desc: "מסלול הליכה קצר (1.1 ק״מ הלוך ושוב) למפל מדורג.", lat: 43.99739, lng: -71.39318 },
+                    { title: "Sugar Hill Overlook", desc: "תצפית נוף על הר טרמונט וצוק הינשוף.", lat: 44.00982, lng: -71.42765 },
+                    { title: "Hancock Overlook", desc: "נקודת תצפית ציורית נוספת על ההרים הלבנים.", lat: 44.04072, lng: -71.52343 },
+                    { title: "Loon Mountain Gondola", desc: "רכבל לפסגת הר לון - נחליט במקום אם לעלות.", lat: 44.05653, lng: -71.63078 },
+                    { title: "Lost River Gorge", desc: "קניון ומערות סלע. הכרטיסים ל-14:00, צריך להגיע עד 13:30.", lat: 44.03723, lng: -71.78507 },
+                    { title: "העיירה Woodsville", desc: "נקודת מעבר בדרך לוורמונט.", lat: 44.15086, lng: -72.03569 },
+                    { title: "Ben & Jerry's Factory", desc: "סיור במפעל הגלידה בוורטרברי - הוזמן ל-17:30 (משך הסיור כ-30 דק׳).", lat: 44.35304, lng: -72.73913 },
+                    { title: "Sun & Ski Inn Stowe", desc: "הגעה למלון בסטואו, וורמונט.", lat: 44.47236, lng: -72.70883 }
+                ]
+            },
+            {
+                dayId: 16, date: "25/9/26", dayName: "שישי", title: "סטואו לאלבני", 
+                driveTime: "4 שעות ו-15 דק'", driveDistance: "217 מייל",
+                weather: { max: 22, min: 11, desc: "מעונן חלקית", aqi: 30, icon: "fa-cloud-sun", color: "sky" },
+                stops: [
+                    { title: "Mt. Mansfield Gondola", desc: "עלייה להר הגבוה בוורמונט. הרכבל פועל מ-09:30 - להשתדל להגיע ב-09:00 (42$ מבוגר, 27$ ילד, אשראי בלבד). רק אם הראות טובה.", lat: 44.53168, lng: -72.78768 },
+                    { title: "Historic Grist Mill Bridge", desc: "גשר מקורה אותנטי מהמאה ה-19 על נהר ברוסטר.", lat: 44.63664, lng: -72.82560 },
+                    { title: "Fairfax Hydro Falls", desc: "בית עץ ישן עם גלגל מים בחזיתו, ממש בחזרה לכביש.", lat: 44.63789, lng: -72.82562 },
+                    { title: "Fairfax Falls (תצפית 1)", desc: "נקודת צפייה ראשונה על המפלים.", lat: 44.65122, lng: -72.98892 },
+                    { title: "Fairfax Falls (תצפית 2)", desc: "נקודת צפייה שנייה על המפלים.", lat: 44.65083, lng: -72.99061 },
+                    { title: "מעבורת Gordons Landing", desc: "מעבורת Grand Isle VT - Plattsburgh NY, כ-14 דק׳ שייט. חציית אגם שמפליין למדינת ניו יורק.", lat: 44.68713, lng: -73.34852 },
+                    { title: "Adirondack Outlet Mall", desc: "עצירת מנוחה וארוחת צהריים בדרך דרומה לאלבני.", lat: 43.36590, lng: -73.69950 },
+                    { title: "Tru By Hilton Albany", desc: "הגעה למלון באלבני (Crossgates Mall).", lat: 42.68691, lng: -73.85318 }
+                ]
+            },
+            {
+                dayId: 17, date: "26/9/26", dayName: "שבת", title: "מאלבני למנהטן", 
+                driveTime: "שעתיים ו-50 דק'", driveDistance: "156 מייל",
+                weather: { max: 25, min: 15, desc: "שמיים נקיים", aqi: 45, icon: "fa-sun", color: "amber" },
+                stops: [
+                    { title: "Woodbury Common Outlets", desc: "יום קניות מרכזי באאוטלט הענק - נהיה שם כל היום.", lat: 41.31688, lng: -74.12892 },
+                    { title: "Hilton Garden Inn Manhattan", desc: "חובה למלא דלק לפני מנהרת לינקולן! המלון ברחוב 35 מערב, מנהטן.", lat: 40.75026, lng: -73.98669 }
+                ]
+            },
+            {
+                dayId: 18, date: "27/9/26", dayName: "ראשון", title: "החזרת הרכב ומחזמר Wicked",
+                driveTime: "30 דק'", driveDistance: "3 מייל",
+                weather: { max: 24, min: 16, desc: "שמיים נקיים", aqi: 50, icon: "fa-sun", color: "amber" },
+                stops: [
+                    { title: "תדלוק לפני החזרה (Mobil)", desc: "תחנת דלק ברחוב 466 10th Ave (שדרה עשירית פינת רחוב 36 מערב). יש להחזיר את הרכב עם מיכל מלא.", lat: 40.75601, lng: -73.99787 },
+                    { title: "החזרת הרכב - 313 W 56th St", desc: "התחנה נפתחת ב-09:30, בתוך מגרש חניה רב-קומתי. לבדוק שלא נשאר ציוד ברכב כולל ה-EZPASS, לנקות בפנים ולצלם קילומטראז'. תשלום 50$ + מיסים על החזרה במנהטן.", lat: 40.76646, lng: -73.98425 },
+                    { title: "חנויות תקליטים (Rockefeller)", desc: "Rough Trade Above / Below בבניין רוקפלר, 30 Rockefeller Plaza.", lat: 40.75874, lng: -73.97867 },
+                    { title: "מחזמר Wicked - Gershwin Theatre", desc: "ההצגה ב-19:00, להגיע לקופות לפחות חצי שעה לפני עם הקוד שנשלח במייל (הזמנה 3PEDEYNY). רחוב 51 מערב בין ברודוויי לשדרה השמינית.", lat: 40.76258, lng: -73.98369 }
+                ]
+            },
+            {
+                dayId: 19, date: "28/9/26", dayName: "שני", title: "מנהטן - יום חופשי",
+                driveTime: "אין", driveDistance: "הליכה",
+                weather: { max: 23, min: 15, desc: "מעונן חלקית", aqi: 52, icon: "fa-cloud-sun", color: "sky" },
+                stops: [
+                    { title: "יום חופשי במנהטן", desc: "אין תוכנית קבועה בקובץ המסלול - יום פתוח לטיול בעיר.", lat: 40.75026, lng: -73.98669 }
+                ]
+            },
+            {
+                dayId: 20, date: "29/9/26", dayName: "שלישי", title: "מנהטן - ארוחה בגלאגרס",
+                driveTime: "אין", driveDistance: "הליכה",
+                weather: { max: 22, min: 14, desc: "מעונן חלקית", aqi: 50, icon: "fa-cloud-sun", color: "sky" },
+                stops: [
+                    { title: "יום חופשי במנהטן", desc: "טיול חופשי בעיר עד ארוחת הערב.", lat: 40.75026, lng: -73.98669 },
+                    { title: "Gallagher's Steakhouse", desc: "הוזמן שולחן ל-9 סועדים (על שם לורן) עם כיסא לליאם, ב-18:30. רחוב 52 מערב בין ברודוויי לשדרה השמינית.", lat: 40.76245, lng: -73.98450 }
+                ]
+            },
+            {
+                dayId: 21, date: "30/9/26", dayName: "רביעי", title: "מנהטן - צ'ק אין לטיסה",
+                driveTime: "אין", driveDistance: "הליכה",
+                weather: { max: 22, min: 14, desc: "עננים", aqi: 48, icon: "fa-cloud", color: "gray" },
+                stops: [
+                    { title: "צ'ק אין אונליין לטיסה", desc: "לבצע צ'ק אין 24 שעות לפני הטיסה חזרה (LY008).", lat: 40.75026, lng: -73.98669 },
+                    { title: "יום חופשי במנהטן", desc: "יום אחרון מלא בעיר לפני הטיסה.", lat: 40.75026, lng: -73.98669 }
+                ]
+            },
+            {
+                dayId: 22, date: "1/10/26", dayName: "חמישי", title: "אי רוזוולט וטיסה חזרה",
+                driveTime: "אין", driveDistance: "רכבת ורכבל",
+                weather: { max: 21, min: 13, desc: "מעונן חלקית", aqi: 45, icon: "fa-cloud-sun", color: "sky" },
+                stops: [
+                    { title: "פינוי החדר והפקדת מזוודות", desc: "לוודא שלא נשאר כלום בחדר ושהמזוודות נעולות. הקומפרסור, הפאוורבנק והתקליטים בטרולי לעלייה למטוס - לא במזוודה הגדולה.", lat: 40.75026, lng: -73.98669 },
+                    { title: "Roosevelt Island Tramway", desc: "רכבל לאי רוזוולט מרחוב 59 מזרח פינת השדרה השנייה (או קו F של הרכבת התחתית). כדאי לשבת בצד שמאל לנוף של האיסט ריבר. כרטיס הלוך ושוב.", lat: 40.76135, lng: -73.96388 },
+                    { title: "Four Freedoms Park", desc: "טיילת האי ופארק פור פרידומס - תצפית על מנהטן.", lat: 40.74970, lng: -73.96000 },
+                    { title: "מונית לשדה התעופה JFK", desc: "להזמין מונית ל-17:00-18:00 (לתאם עם הנהג לפי משך הנסיעה). טיסה LY008, המראה 22:20, נחיתה בארץ 15:40 ב-2/10.", lat: 40.6413, lng: -73.7781 }
+                ]
+            }
+        ];
+
+        // State variables
+        let currentDayIndex = 0;
+        let map = null;
+        let markersGroup = null;
+
+        // Initialize Map
+        function initMap() {
+            map = L.map('map', {
+                zoomControl: false 
+            }).setView([42.0, -71.0], 6);
+
+            L.control.zoom({ position: 'topleft' }).addTo(map);
+
+            const googleStreets = L.tileLayer('https://{s}.google.com/vt/lyrs=m&x={x}&y={y}&z={z}', {
+                maxZoom: 20,
+                subdomains: ['mt0', 'mt1', 'mt2', 'mt3'],
+                attribution: '© Google'
+            });
+
+            const googleHybrid = L.tileLayer('https://{s}.google.com/vt/lyrs=s,h&x={x}&y={y}&z={z}', {
+                maxZoom: 20,
+                subdomains: ['mt0', 'mt1', 'mt2', 'mt3'],
+                attribution: '© Google'
+            });
+
+            googleStreets.addTo(map);
+
+            const baseMaps = {
+                "מפה רגילה": googleStreets,
+                "צילום אווירי": googleHybrid
+            };
+            L.control.layers(baseMaps, null, { position: 'topright' }).addTo(map);
+
+            const LocateControl = L.Control.extend({
+                options: { position: 'topleft' },
+                onAdd: function (map) {
+                    const container = L.DomUtil.create('div', 'leaflet-bar leaflet-control leaflet-control-custom');
+                    container.style.backgroundColor = 'white';
+                    container.style.width = '34px';
+                    container.style.height = '34px';
+                    container.style.display = 'flex';
+                    container.style.alignItems = 'center';
+                    container.style.justifyContent = 'center';
+                    container.style.cursor = 'pointer';
+                    container.innerHTML = '<i class="fa-solid fa-crosshairs text-blue-600"></i>';
+                    container.title = 'המיקום שלי';
+                    
+                    container.onclick = function(e){
+                        e.stopPropagation();
+                        map.locate({setView: true, maxZoom: 15});
+                    }
+                    return container;
+                }
+            });
+            map.addControl(new LocateControl());
+
+            let userLocationMarker = null;
+            map.on('locationfound', function(e) {
+                if (userLocationMarker) {
+                    map.removeLayer(userLocationMarker);
+                }
+                userLocationMarker = L.circleMarker(e.latlng, {
+                    radius: 8,
+                    fillColor: "#3b82f6",
+                    color: "#ffffff",
+                    weight: 3,
+                    opacity: 1,
+                    fillOpacity: 0.9
+                }).bindPopup('<div style="direction:rtl; text-align:right;"><b>המיקום שלך</b></div>').addTo(map);
+            });
+
+            map.on('locationerror', function(e) {
+                alert("לא הצלחנו לאתר את המיקום שלך. ודא שה-GPS דלוק ושאישרת לדפדפן לגשת למיקום.");
+            });
+
+            markersGroup = L.layerGroup().addTo(map);
+
+            buildDaysCarousel();
+            updateUI();
+        }
+
+        // One definition of the day-pill styling, used by both the initial build
+        // and every re-render, so the two can never drift apart.
+        function dayButtonClass(isActive) {
+            return 'shrink-0 px-3.5 min-h-[40px] flex items-center rounded-full font-medium text-xs md:text-sm transition-all shadow-sm border '
+                + (isActive
+                    ? 'bg-blue-600 text-white border-blue-600'
+                    : 'bg-white text-gray-600 border-gray-200 active:bg-gray-100');
+        }
+
+        // Build the top carousel with days
+        function buildDaysCarousel() {
+            const container = document.getElementById('daysCarousel');
+            container.innerHTML = '';
+
+            itineraryData.forEach((day, index) => {
+                const btn = document.createElement('button');
+                btn.className = dayButtonClass(index === currentDayIndex);
+                btn.innerHTML = `יום ${day.dayId}`;
+                btn.onclick = () => {
+                    currentDayIndex = index;
+                    updateUI();
+                    btn.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
+                };
+                container.appendChild(btn);
+            });
+        }
+
+        // View Switcher (Tabs)
+        function switchView(viewName, autoFit = true) {
+            const tabList = document.getElementById('tabList');
+            const tabMap = document.getElementById('tabMap');
+            const timelineContainer = document.getElementById('timelineContainer');
+            const mapContainer = document.getElementById('mapContainer');
+
+            if (viewName === 'list') {
+                timelineContainer.classList.remove('hidden');
+                mapContainer.classList.add('hidden');
+                
+                tabList.classList.replace('text-gray-400', 'text-blue-600');
+                tabMap.classList.replace('text-blue-600', 'text-gray-400');
+            } else {
+                timelineContainer.classList.add('hidden');
+                mapContainer.classList.remove('hidden');
+                
+                tabMap.classList.replace('text-gray-400', 'text-blue-600');
+                tabList.classList.replace('text-blue-600', 'text-gray-400');
+                
+                setTimeout(() => { 
+                    map.invalidateSize(); 
+                    if (autoFit) {
+                        fitMapToCurrentDay();
+                    }
+                }, 50);
+            }
+        }
+
+        function fitMapToCurrentDay() {
+            const day = itineraryData[currentDayIndex];
+            const bounds = [];
+            day.stops.forEach(stop => bounds.push([stop.lat, stop.lng]));
+
+            if (bounds.length > 0) {
+                if (bounds.length === 1) {
+                    map.setView(bounds[0], 12);
+                } else {
+                    map.fitBounds(bounds, { padding: [30, 30], maxZoom: 14 });
+                }
+            }
+        }
+
+        // Core update function to reflect the current day's state
+        function updateUI() {
+            const day = itineraryData[currentDayIndex];
+            
+            // Update Carousel Buttons
+            const buttons = document.getElementById('daysCarousel').children;
+            for(let i = 0; i < buttons.length; i++) {
+                buttons[i].className = dayButtonClass(i === currentDayIndex);
+            }
+
+            // Grey out the arrows at the ends of the trip
+            document.getElementById('btnPrev').disabled = (currentDayIndex === 0);
+            document.getElementById('btnNext').disabled = (currentDayIndex === itineraryData.length - 1);
+
+            // Update Text Data
+            document.getElementById('currentDayTitle').innerText = day.title;
+            document.getElementById('currentDate').innerText = `${day.dayName}, ${day.date}`;
+            document.getElementById('statDistance').innerText = day.driveDistance;
+            document.getElementById('statTime').innerText = day.driveTime;
+            
+            // Update Weather Data
+            document.getElementById('statWeatherTemp').innerText = `${day.weather.max}°C / ${day.weather.min}°C`;
+            document.getElementById('statWeatherDesc').innerText = `${day.weather.desc}, AQI: ${day.weather.aqi}`;
+            document.getElementById('weatherIcon').className = `fa-solid ${day.weather.icon}`;
+            document.getElementById('weatherIconBg').className = `bg-${day.weather.color}-100 text-${day.weather.color}-500 rounded-full h-7 w-7 flex items-center justify-center text-xs shrink-0`;
+
+            // Update Timeline
+            const timelineContainer = document.getElementById('timelineContent');
+            timelineContainer.innerHTML = '';
+            
+            // Update Map Points
+            markersGroup.clearLayers();
+
+            day.stops.forEach((stop, index) => {
+                // Timeline card
+                const item = document.createElement('div');
+                item.className = 'bg-white rounded-xl p-3 md:p-4 shadow-sm border border-gray-100 flex gap-2.5 md:gap-3 items-start transition-colors';
+                
+                item.innerHTML = `
+                    <div class="bg-blue-100 text-blue-600 font-bold rounded-full w-7 h-7 md:w-8 md:h-8 flex items-center justify-center shrink-0 border border-blue-200 text-xs md:text-sm mt-0.5">
+                        ${index + 1}
+                    </div>
+                    <div class="flex-1 min-w-0">
+                        <h3 class="font-bold text-gray-800 text-[15px] md:text-base mb-1 leading-snug">${stop.title}</h3>
+                        <p class="text-[13px] md:text-sm text-gray-600 leading-relaxed">${stop.desc}</p>
+                    </div>
+                    <div class="flex flex-col gap-2 shrink-0">
+                        <button class="bg-blue-50 text-blue-500 active:bg-blue-200 h-10 w-10 rounded-full flex justify-center items-center transition-colors" onclick="event.stopPropagation(); focusOnMap(${stop.lat}, ${stop.lng}, ${index})" aria-label="הצג במפה" title="הצג במפה">
+                            <i class="fa-solid fa-location-crosshairs text-sm"></i>
+                        </button>
+                        <button class="bg-emerald-50 text-emerald-500 active:bg-emerald-200 h-10 w-10 rounded-full flex justify-center items-center transition-colors" onclick="event.stopPropagation(); window.open('https://www.google.com/maps/dir/?api=1&destination=${stop.lat},${stop.lng}', '_blank')" aria-label="נווט ליעד" title="נווט ליעד">
+                            <i class="fa-solid fa-diamond-turn-right text-sm"></i>
+                        </button>
+                    </div>
+                `;
+                timelineContainer.appendChild(item);
+
+                // Map Marker
+                const iconHtml = `<div class="custom-marker">${index + 1}</div>`;
+                const customIcon = L.divIcon({
+                    html: iconHtml,
+                    className: '',
+                    iconSize: [28, 28],
+                    iconAnchor: [14, 14]
+                });
+
+                const marker = L.marker([stop.lat, stop.lng], { icon: customIcon })
+                    .bindPopup(`<div style="direction:rtl; text-align:right;"><b>${stop.title}</b><br><span style="font-size:11px;">${stop.desc}</span></div>`)
+                    .addTo(markersGroup);
+                
+                stop._marker = marker;
+            });
+
+            // Adjust Map view bounds
+            fitMapToCurrentDay();
+        }
+
+        function nextDay() {
+            if (currentDayIndex < itineraryData.length - 1) {
+                currentDayIndex++;
+                updateUI();
+                scrollToActiveButton();
+            }
+        }
+
+        function prevDay() {
+            if (currentDayIndex > 0) {
+                currentDayIndex--;
+                updateUI();
+                scrollToActiveButton();
+            }
+        }
+
+        function scrollToActiveButton() {
+            const buttons = document.getElementById('daysCarousel').children;
+            if (buttons[currentDayIndex]) {
+                buttons[currentDayIndex].scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
+            }
+        }
+
+        function focusOnMap(lat, lng, stopIndex) {
+            // First, switch to the map tab automatically without auto-fitting
+            switchView('map', false);
+            
+            // Fly to location
+            map.flyTo([lat, lng], 15, {
+                animate: true,
+                duration: 1.2
+            });
+
+            // Open the marker popup
+            const day = itineraryData[currentDayIndex];
+            if (day.stops[stopIndex] && day.stops[stopIndex]._marker) {
+                setTimeout(() => {
+                    day.stops[stopIndex]._marker.openPopup();
+                }, 1000); 
+            }
+        }
+
+        // Swipe left/right on the itinerary to move between days.
+        // RTL: later days sit to the left, so dragging content rightwards
+        // brings the next day in - matching the chevron directions in the nav.
+        function enableSwipeNavigation() {
+            const el = document.getElementById('timelineContainer');
+            let startX = 0, startY = 0, tracking = false;
+
+            el.addEventListener('touchstart', (e) => {
+                if (e.touches.length !== 1) { tracking = false; return; }
+                startX = e.touches[0].clientX;
+                startY = e.touches[0].clientY;
+                tracking = true;
+            }, { passive: true });
+
+            el.addEventListener('touchend', (e) => {
+                if (!tracking) return;
+                tracking = false;
+
+                const dx = e.changedTouches[0].clientX - startX;
+                const dy = e.changedTouches[0].clientY - startY;
+
+                // Only act on a clearly horizontal flick, so vertical scrolling wins ties
+                if (Math.abs(dx) < 60 || Math.abs(dx) < Math.abs(dy) * 1.5) return;
+
+                if (dx > 0) {
+                    nextDay();
+                } else {
+                    prevDay();
+                }
+            }, { passive: true });
+        }
+
+        // Rotating the device or crossing the tablet breakpoint changes the map's
+        // box, so Leaflet has to be told. Note that plain 'resize' also fires on
+        // phones every time the URL bar collapses - so that path only re-measures
+        // and must never re-fit, or it would snap away a pan the user is mid-way
+        // through. Re-fitting is reserved for a real layout change.
+        function handleViewportChange() {
+            let pending;
+            const refresh = (refit) => {
+                clearTimeout(pending);
+                pending = setTimeout(() => {
+                    if (!map) return;
+                    map.invalidateSize();
+                    if (refit) fitMapToCurrentDay();
+                }, 150);
+            };
+
+            window.addEventListener('resize', () => refresh(false));
+            window.addEventListener('orientationchange', () => refresh(true));
+
+            const wide = window.matchMedia('(min-width: 768px)');
+            const onBreakpoint = () => refresh(true);
+            if (wide.addEventListener) {
+                wide.addEventListener('change', onBreakpoint);
+            } else {
+                wide.addListener(onBreakpoint); // older iOS Safari
+            }
+        }
+
+        // Initialize App — the gate decides when startApp() runs.
+        document.addEventListener('DOMContentLoaded', () => {
+            initAuth();
+        });
+
+    </script>
+</body>
+</html>
