@@ -400,7 +400,8 @@
         // address itself, so the family's email is not left sitting at a public URL. To change who
         // gets in, edit users.plain.txt (git-ignored) and re-run `python hash-users.py`.
         async function loadAllowlist() {
-            const res = await fetch('users.txt', { cache: 'no-store' });
+            const url = new URL('users.txt', location.origin + '/').href;
+            const res = await fetch(url, { cache: 'no-store' });
             if (!res.ok) throw new Error('users.txt returned ' + res.status);
             const entries = (await res.text())
                 .split(/[\n,]/)
@@ -564,6 +565,10 @@
                 clearSession();   // dropped from users.txt since the last sign-in
             }
 
+            if (!allowedEntries) {
+                // Log diagnostic info to help debug why users.txt failed to load
+                console.error('DEBUG: users.txt failed to load. Location:', location.href, 'Origin:', location.origin);
+            }
             showGate();
         }
 
