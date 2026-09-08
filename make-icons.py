@@ -7,7 +7,7 @@ The output PNGs are committed and deployed — this script only exists so the ic
 can be regenerated rather than re-drawn by hand. Colours mirror the sign-in gate
 gradient in index.html, so the icon, the splash screen and the gate all match.
 
-The car sits inside the maskable "safe zone" (the centre 80% circle), so the same
+The mountain icon sits inside the maskable "safe zone" (the centre 80% circle), so the same
 artwork serves both the `any` and `maskable` purposes: Android can crop it to a
 circle or a squircle without clipping anything.
 """
@@ -20,10 +20,10 @@ MASTER = 1024          # artwork is authored at this size
 SS = 4                 # supersample factor for the white shapes, then downscaled
 OUT = "icons"
 
-# Sampled from `#authGate`'s linear-gradient in index.html.
-STOPS = [(0.00, (30, 58, 138)),     # #1e3a8a
-         (0.55, (37, 99, 235)),     # #2563eb
-         (1.00, (59, 130, 246))]    # #3b82f6
+# Green gradient for mountain icon
+STOPS = [(0.00, (20, 80, 40)),      # dark green
+         (0.55, (30, 120, 60)),     # medium green
+         (1.00, (40, 150, 80))]     # light green
 
 
 def gradient(size):
@@ -43,27 +43,29 @@ def gradient(size):
     return img
 
 
-def car_mask():
-    """Alpha mask of the car: 255 where white paint goes, 0 where the gradient shows."""
+def mountain_mask():
+    """Alpha mask of mountains: 255 where white paint goes, 0 where the gradient shows."""
     s = MASTER * SS
     mask = Image.new("L", (s, s), 0)
     d = ImageDraw.Draw(mask)
 
-    def box(x0, y0, x1, y1, r, fill):
-        d.rounded_rectangle([x0 * SS, y0 * SS, x1 * SS, y1 * SS], radius=r * SS, fill=fill)
+    # Mountain peaks with green outline effect (drawing as white shapes)
+    # Left peak
+    left_peak = [(150 * SS, 600 * SS), (300 * SS, 250 * SS), (380 * SS, 450 * SS)]
+    d.polygon(left_peak, fill=255)
 
-    def circle(cx, cy, r, fill):
-        d.ellipse([(cx - r) * SS, (cy - r) * SS, (cx + r) * SS, (cy + r) * SS], fill=fill)
+    # Center peak (tallest)
+    center_peak = [(350 * SS, 700 * SS), (512 * SS, 150 * SS), (620 * SS, 500 * SS)]
+    d.polygon(center_peak, fill=255)
 
-    box(120, 475, 904, 595, 45, 255)      # chassis
-    box(300, 330, 700, 510, 70, 255)      # cabin
-    circle(316, 595, 100, 255)            # rear wheel
-    circle(708, 595, 100, 255)            # front wheel
+    # Right peak
+    right_peak = [(590 * SS, 550 * SS), (750 * SS, 280 * SS), (850 * SS, 650 * SS)]
+    d.polygon(right_peak, fill=255)
 
-    box(348, 372, 488, 462, 22, 0)        # rear window
-    box(524, 372, 664, 462, 22, 0)        # front window
-    circle(316, 595, 46, 0)               # rear hub
-    circle(708, 595, 46, 0)               # front hub
+    # Snow caps (white tips on peaks)
+    d.polygon([(512 * SS, 150 * SS), (485 * SS, 250 * SS), (540 * SS, 250 * SS)], fill=255)
+    d.polygon([(300 * SS, 250 * SS), (280 * SS, 320 * SS), (320 * SS, 320 * SS)], fill=255)
+    d.polygon([(750 * SS, 280 * SS), (725 * SS, 360 * SS), (775 * SS, 360 * SS)], fill=255)
 
     return mask.resize((MASTER, MASTER), LANCZOS)
 
@@ -78,7 +80,7 @@ def build(size, mask_master, grad_master):
 def main():
     import os
     os.makedirs(OUT, exist_ok=True)
-    mask, grad = car_mask(), gradient(MASTER)
+    mask, grad = mountain_mask(), gradient(MASTER)
     for name, size in [("icon-192.png", 192), ("icon-512.png", 512),
                        ("apple-touch-icon.png", 180), ("favicon-32.png", 32)]:
         path = os.path.join(OUT, name)
