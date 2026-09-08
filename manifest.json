@@ -1,0 +1,27 @@
+{
+  "id": "/",
+  "name": "טיול משפחתי לארה״ב 2026",
+  "short_name": "טיול מזור",
+  "description": "מסלול יומי ומפה אינטראקטיבית לטיול המשפחתי בצפון-מזרח ארה״ב.",
+  "lang": "he",
+  "dir": "rtl",
+  "start_url": "/index.html",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#2563eb",
+  "theme_color": "#2563eb",
+  "icons": [
+    {
+      "src": "icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}

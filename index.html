@@ -10,6 +10,13 @@
     <meta name="apple-mobile-web-app-title" content="טיול מזור">
     <meta name="format-detection" content="telephone=no">
     <title>טיול משפחתי לארה״ב 2026</title>
+
+    <!-- Home screen install. manifest.json does the real work on Android: icon, an app
+         drawer entry and a standalone window with no address bar. iOS Safari ignores most
+         of it and uses the apple-* metas above plus this touch icon. -->
+    <link rel="manifest" href="manifest.json">
+    <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+    <link rel="icon" type="image/png" sizes="32x32" href="icons/favicon-32.png">
     
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
@@ -181,6 +188,52 @@
         }
         .gate-btn:active { background: rgba(255, 255, 255, 0.28); }
         .gate-foot { font-size: 12px; opacity: 0.6; }
+
+        /* Add-to-home-screen hint. Plain CSS, like the gate, so it still looks right on a
+           cold Tailwind CDN. Floats over the tab bar instead of joining the flex column,
+           so it cannot disturb the fixed-viewport layout. */
+        #installHint {
+            position: fixed;
+            z-index: 90;
+            right: 12px;
+            left: 12px;
+            bottom: calc(64px + env(safe-area-inset-bottom));
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 10px 12px;
+            border-radius: 16px;
+            background: #1e3a8a;
+            color: #fff;
+            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.28);
+            font-size: 13px;
+            line-height: 1.5;
+        }
+        #installHint[hidden] { display: none; }
+        .install-icon { font-size: 18px; flex-shrink: 0; opacity: 0.9; }
+        .install-text { flex: 1; }
+        .install-btn {
+            background: #fff;
+            color: #1e3a8a;
+            border: 0;
+            border-radius: 999px;
+            padding: 8px 14px;
+            font: inherit;
+            font-size: 13px;
+            font-weight: 700;
+            cursor: pointer;
+            flex-shrink: 0;
+        }
+        .install-btn:active { background: #dbeafe; }
+        .install-close {
+            background: none;
+            border: 0;
+            color: rgba(255, 255, 255, 0.7);
+            font-size: 15px;
+            padding: 4px 6px;
+            cursor: pointer;
+            flex-shrink: 0;
+        }
     </style>
 </head>
 <body class="text-gray-800">
@@ -299,6 +352,15 @@
                 <span class="text-[11px] font-medium">מפה</span>
             </button>
         </nav>
+
+        <!-- Shown once, and only when the app is running in a browser tab on a platform
+             that can actually add it to the home screen. -->
+        <div id="installHint" hidden>
+            <i class="fa-solid fa-mobile-screen-button install-icon"></i>
+            <span class="install-text" id="installHintText"></span>
+            <button class="install-btn" id="installHintBtn" onclick="runInstallPrompt()" hidden>התקנה</button>
+            <button class="install-close" onclick="dismissInstallHint()" aria-label="סגירה"><i class="fa-solid fa-xmark"></i></button>
+        </div>
     </div>
 
     <!-- JavaScript Application Logic -->
@@ -517,6 +579,10 @@
             initMap();
             enableSwipeNavigation();
             handleViewportChange();
+
+            // Late enough that it never competes with the first paint, and late enough
+            // that Chrome has usually fired beforeinstallprompt by now.
+            setTimeout(maybeShowInstallHint, 1500);
         }
 
         // Database
@@ -1365,6 +1431,84 @@
             // — a visible jolt if this lands while the user is panning around.
             renderWeather();
         }
+
+        // ─────────────────────────────────────────────────────────────────────────────
+        // Add to home screen
+        //
+        // manifest.json does the real work — this is discovery only, so nobody has to know
+        // to go hunting through a browser menu. Two very different platforms:
+        //
+        //   Android/Chrome fires beforeinstallprompt when the app qualifies for install.
+        //   We swallow Chrome's own mini-infobar and keep the event, so tapping "התקנה"
+        //   installs a real WebAPK — its own icon, its own app-drawer entry, no address bar.
+        //
+        //   iOS never fires that event. Share → "הוספה למסך הבית" in Safari is the only
+        //   route, so all we can do is say so.
+        //
+        // Either way it appears once and is remembered as dismissed. It lives inside
+        // .app-container, so the gate hides it for anyone who has not signed in yet.
+
+        const INSTALL_HINT_KEY = 'tm_install_hint_v1';
+        let deferredInstallPrompt = null;
+
+        function isStandalone() {
+            return window.matchMedia('(display-mode: standalone)').matches ||
+                   window.navigator.standalone === true;   // iOS
+        }
+
+        function installHintDismissed() {
+            try { return localStorage.getItem(INSTALL_HINT_KEY) === 'done'; } catch (e) { return false; }
+        }
+
+        function dismissInstallHint() {
+            try { localStorage.setItem(INSTALL_HINT_KEY, 'done'); } catch (e) { /* private mode */ }
+            document.getElementById('installHint').hidden = true;
+        }
+
+        function showInstallHint(html, withButton) {
+            if (!appStarted || isStandalone() || installHintDismissed()) return;
+            document.getElementById('installHintText').innerHTML = html;
+            document.getElementById('installHintBtn').hidden = !withButton;
+            document.getElementById('installHint').hidden = false;
+        }
+
+        async function runInstallPrompt() {
+            if (!deferredInstallPrompt) return;
+            const promptEvent = deferredInstallPrompt;
+            deferredInstallPrompt = null;   // the event is single-use
+            promptEvent.prompt();
+            await promptEvent.userChoice;
+            dismissInstallHint();
+        }
+
+        function maybeShowInstallHint() {
+            if (deferredInstallPrompt) {
+                showInstallHint('רוצים גישה מהירה? הוסיפו את האפליקציה למסך הבית.', true);
+                return;
+            }
+
+            // Only real Safari on iOS can add to the home screen. Chrome/Firefox on iOS and
+            // in-app browsers (Facebook, Instagram, WhatsApp) cannot, and instructions that
+            // lead nowhere are worse than no hint at all.
+            const ua = navigator.userAgent;
+            const isIos = /iPad|iPhone|iPod/.test(ua) ||
+                          (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+            const isSafari = /Safari/.test(ua) &&
+                             !/CriOS|FxiOS|EdgiOS|OPiOS|FBAN|FBAV|Instagram|Line|MicroMessenger/.test(ua);
+            if (isIos && isSafari) {
+                showInstallHint('להוספה למסך הבית: הקישו על כפתור השיתוף ' +
+                                '<i class="fa-solid fa-arrow-up-from-bracket"></i> ' +
+                                'ואז על ״הוספה למסך הבית״.', false);
+            }
+        }
+
+        window.addEventListener('beforeinstallprompt', (e) => {
+            e.preventDefault();          // suppress Chrome's own banner; we ask in-app instead
+            deferredInstallPrompt = e;
+            maybeShowInstallHint();      // no-op until startApp() has run
+        });
+
+        window.addEventListener('appinstalled', dismissInstallHint);
 
         // Initialize App — the gate decides when startApp() runs.
         document.addEventListener('DOMContentLoaded', () => {
