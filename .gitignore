@@ -10,4 +10,8 @@ hotels.txt
 # The real email addresses. users.txt (hashes) is generated from this and IS deployed.
 users.plain.txt
 
+# GitHub personal access token used for deploys. A live credential — never commit it,
+# and delete it once the deploy is done.
+github repo token.txt
+
 .vercel/
